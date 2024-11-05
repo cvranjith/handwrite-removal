@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Selective Color Removal Tool</title>
+  <style>
+	  .canvas-container {
+	        position: relative;
+	        overflow: auto;
+	        max-width: 100vw;
+	        max-height: 90vh;
+	        margin-top: 50px;
+	      }
+	      canvas {
+	        border: 1px solid black;
+	        cursor: crosshair;
+	        display: block;
+	        transform-origin: top left;
+	      }
+	      #highlight-overlay {
+	        display: none; /* Hidden by default */
+	      }
+	      #controls {
+	        position: fixed;
+	        top: 10px;
+	        right: 10px;
+	        background-color: rgba(255, 255, 255, 0.9);
+	        padding: 10px;
+	        border: 1px solid #ccc;
+	        border-radius: 5px;
+	        box-shadow: 0px 0px 5px rgba(0, 0, 0, 0.2);
+	        z-index: 10;
+	        cursor: move;
+	        width: 200px;
+	        transition: transform 0.2s ease;
+	      }
+	      #controls.minimized {
+	        transform: scale(0.6);
+	        opacity: 0.8;
+	      }
+	      #controls.hide {
+	        display: none;
+	      }
+	      #controls label, #controls input {
+	        margin: 5px 0;
+	        display: block;
+	      }
+	      #controls button {
+	        margin-top: 10px;
+	        width: 100%;
+	      }
+		  #close-button {
+		        position: absolute !important;
+		        top: -8px !important;
+		        right: -8px !important;
+		        width: 20px !important;
+		        height: 20px !important;
+		        padding: 0 !important;
+		        margin: 0 !important;
+		        background-color: #ff4444 !important;
+		        border: 2px solid #fff !important;
+		        border-radius: 50% !important;
+		        color: white !important;
+		        font-size: 14px !important;
+		        line-height: 16px !important;
+		        text-align: center !important;
+		        cursor: pointer !important;
+		        box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
+		        transition: all 0.2s ease !important;
+		        display: flex !important;
+		        justify-content: center !important;
+		        align-items: center !important;
+		      }
+		      #close-button:hover {
+		        background-color: #ff0000 !important;
+		        transform: scale(1.1) !important;
+		      }
+	      #show-controls {
+	        position: fixed;
+	        top: 10px;
+	        right: 10px;
+	        width: 30px;
+	        height: 30px;
+	        border: 1px solid #ccc;
+	        border-radius: 5px;
+	        background-color: rgba(255, 255, 255, 0.9);
+	        display: none;
+	        justify-content: center;
+	        align-items: center;
+	        cursor: pointer;
+	        z-index: 10;
+	      }
+	      .active-tool {
+	        background-color: #4CAF50 !important;
+	        color: white !important;
+	      }
+	      .button-group {
+	        display: flex;
+	        gap: 5px;
+	        margin-top: 10px;
+	      }
+	      .button-group button {
+	        flex: 1;
+	      }
+		  
+		  .tool-group {
+		        margin: 10px 0;
+		        padding: 5px;
+		        border: 1px solid #ccc;
+		        border-radius: 4px;
+		      }
+		      .tool-group label {
+		        display: inline-block;
+		        margin-right: 10px;
+		      }
+		      #eraserSize {
+		        width: 60px;
+		        margin-right: 10px;
+		      }
+		      .active-tool {
+		        background-color: #4CAF50 !important;
+		        color: white !important;
+		      }
+			  
+  </style>
+</head>
+<body>
+  <input type="file" id="upload" accept="image/*">
+  <canvas id="canvas"></canvas>
+  <canvas id="highlight-overlay" class="highlight-overlay"></canvas>
+
+  <div id="controls">
+      <button id="close-button" class="close-button">×</button>
+    
+
+	
+
+      <div class="tool-group">
+		  <div>
+        <label>Tolerance:</label>
+    <table><tr><td>
+    <label for="blackTolerance">Black</label>
+    <input type="number" id="blackTolerance" value="130" min="0" max="255">
+    </td><td>
+    <label for="whiteTolerance">White</label>
+    <input type="number" id="whiteTolerance" value="300" min="0" max="255">
+    </td></tr></table>
+</div>
+        <button id="highlight-colored">Highlight Colored Areas</button>
+        <button id="remove-colored">Remove Colored Areas</button>
+		
+        <div class="button-group">
+          <button id="draw-rectangle">Draw Protected Area</button>
+          <button id="clear-areas">Clear Areas</button>
+        </div>
+		
+      </div>
+
+      <div class="tool-group">
+        <button id="eraser-tool">Eraser Tool</button>
+		<table>
+			<tr><td>
+        <input type="number" id="eraserSize" min="1" max="100" value="30" title="Eraser Size">
+	</td><td>
+        <input type="color" id="colorPicker" value="#FFFFFF" title="Eraser Color">
+	</td></tr></table>
+      </div>
+
+      <div class="tool-group">
+        <label>Canvas Controls:</label>
+        <div id="view-controls">
+			<div class="button-group">
+          <button id="fit-to-window">Fit to Window</button>
+          <button id="original-size" class="active">Original Size</button>
+	  </div>
+        </div>
+		<div class="button-group">
+        <button id="reset">Reset</button>
+        <button id="saveImg">Save Image</button>
+		</div>
+      </div>
+    </div>
+
+  <div id="show-controls">+</div>
+
+  <script>
+	  
+	  const canvasContainer = document.getElementById('canvas-container');
+	      const canvas = document.getElementById('canvas');
+	      const ctx = canvas.getContext('2d');
+	      const upload = document.getElementById('upload');
+	      const fitToWindowBtn = document.getElementById('fit-to-window');
+	      const originalSizeBtn = document.getElementById('original-size');
+	      const drawRectButton = document.getElementById('draw-rectangle');
+	      const clearAreasButton = document.getElementById('clear-areas');
+	      let imageData; // Original image
+	      let editedImageState; // Current edited state without rectangles
+	      let imgWidth, imgHeight;
+	      let isDrawing = false;
+	      let startX, startY;
+	      let protectedAreas = [];
+	      let drawMode = false;
+	      let currentScale = 1;
+	      let originalWidth = 0;
+	      let originalHeight = 0;
+		  
+		  let highlightMode = false;
+		      const highlightOverlay = document.getElementById('highlight-overlay');
+		      const highlightCtx = highlightOverlay.getContext('2d');
+
+	      function fitToWindow() {
+	        const containerWidth = window.innerWidth - 40; // Subtract padding
+	        const containerHeight = window.innerHeight - 100; // Subtract space for controls
+      
+	        const scaleX = containerWidth / originalWidth;
+	        const scaleY = containerHeight / originalHeight;
+	        currentScale = Math.min(scaleX, scaleY);
+
+	        canvas.style.transform = `scale(${currentScale})`;
+			highlightOverlay.style.transform = `scale(${currentScale})`;
+      
+	        fitToWindowBtn.classList.add('active-tool');
+	        originalSizeBtn.classList.remove('active-tool');
+	      }
+
+	      function resetToOriginalSize() {
+	        currentScale = 1;
+	        canvas.style.transform = 'scale(1)';
+			highlightOverlay.style.transform = 'scale(1)';
+	        originalSizeBtn.classList.add('active-tool');
+	        fitToWindowBtn.classList.remove('active-tool');
+	      }
+
+	      fitToWindowBtn.addEventListener('click', fitToWindow);
+	      originalSizeBtn.addEventListener('click', resetToOriginalSize);
+
+	      // Modified upload event listener
+	      upload.addEventListener('change', (e) => {
+	        const file = e.target.files[0];
+	        const img = new Image();
+      
+	        img.onload = () => {
+	          originalWidth = img.width;
+	          originalHeight = img.height;
+	          canvas.width = img.width;
+	          canvas.height = img.height;
+	          ctx.drawImage(img, 0, 0);
+	          imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+	          editedImageState = ctx.getImageData(0, 0, canvas.width, canvas.height);
+			  
+	          // Setup overlay canvas
+	          highlightOverlay.width = img.width;
+	          highlightOverlay.height = img.height;
+	          highlightOverlay.style.width = canvas.style.width;
+	          highlightOverlay.style.height = canvas.style.height;
+			  
+	          protectedAreas = [];
+			  updateCanvasVisibility();
+        
+	          // Auto-fit to window on initial load
+	          fitToWindow();
+	        };
+      
+	        img.src = URL.createObjectURL(file);
+	      });
+
+	      // Modified mouse position calculation to account for scaling
+	      function getScaledMousePosition(e) {
+	        const rect = canvas.getBoundingClientRect();
+	        const scaleX = canvas.width / rect.width;
+	        const scaleY = canvas.height / rect.height;
+      
+	        return {
+	          x: (e.clientX - rect.left) * scaleX,
+	          y: (e.clientY - rect.top) * scaleY
+	        };
+	      }
+	
+    drawRectButton.addEventListener('click', () => {
+      drawMode = !drawMode;
+      canvas.style.cursor = drawMode ? 'crosshair' : 'default';
+      drawRectButton.classList.toggle('active-tool');
+      
+      if (!drawMode) {
+        // When exiting draw mode, restore the edited state without rectangles
+        if (editedImageState) {
+          ctx.putImageData(editedImageState, 0, 0);
+        }
+      } else {
+        // When entering draw mode, draw rectangles over current state
+		  resetToOriginalSize();
+        drawProtectedAreas();
+      }
+    });
+
+    clearAreasButton.addEventListener('click', () => {
+      protectedAreas = [];
+      if (editedImageState) {
+        ctx.putImageData(editedImageState, 0, 0);
+      }
+      if (drawMode) {
+        drawProtectedAreas();
+      }
+    });
+
+    // Mouse events for rectangle drawing
+    canvas.addEventListener('mousedown', startDrawing);
+    canvas.addEventListener('mousemove', drawRect);
+    canvas.addEventListener('mouseup', endDrawing);
+
+// Update your existing mouse event handlers
+    function startDrawing(e) {
+      if (!drawMode) return;
+      isDrawing = true;
+      const pos = getScaledMousePosition(e);
+      startX = pos.x;
+      startY = pos.y;
+    }
+
+    function drawRect(e) {
+      if (!isDrawing || !drawMode) return;
+      
+      const pos = getScaledMousePosition(e);
+      const currentX = pos.x;
+      const currentY = pos.y;
+      
+      ctx.putImageData(editedImageState, 0, 0);
+      drawProtectedAreas();
+      
+      ctx.fillStyle = 'rgba(255, 255, 0, 0.2)';
+      ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
+      ctx.lineWidth = 2;
+      
+      const width = currentX - startX;
+      const height = currentY - startY;
+      
+      ctx.beginPath();
+      ctx.rect(startX, startY, width, height);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    function endDrawing(e) {
+      if (!isDrawing || !drawMode) return;
+      
+      const pos = getScaledMousePosition(e);
+      const endX = pos.x;
+      const endY = pos.y;
+      
+      protectedAreas.push({
+        x: Math.min(startX, endX),
+        y: Math.min(startY, endY),
+        width: Math.abs(endX - startX),
+        height: Math.abs(endY - startY)
+      });
+      
+      isDrawing = false;
+    }
+
+    function endDrawing(e) {
+      if (!isDrawing || !drawMode) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      const endX = e.clientX - rect.left;
+      const endY = e.clientY - rect.top;
+      
+      // Add new protected area
+      protectedAreas.push({
+        x: Math.min(startX, endX),
+        y: Math.min(startY, endY),
+        width: Math.abs(endX - startX),
+        height: Math.abs(endY - startY)
+      });
+      
+      isDrawing = false;
+    }
+
+    function drawProtectedAreas() {
+      if (!drawMode) return;
+      
+      protectedAreas.forEach(area => {
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.2)';
+        ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.rect(area.x, area.y, area.width, area.height);
+        ctx.fill();
+        ctx.stroke();
+      });
+    }
+
+    function isPointInProtectedArea(x, y) {
+      return protectedAreas.some(area => 
+        x >= area.x && x <= area.x + area.width &&
+        y >= area.y && y <= area.y + area.height
+      );
+    }
+
+    upload.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      const img = new Image();
+      img.onload = () => {
+        imgWidth = img.width;
+        imgHeight = img.height;
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        editedImageState = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        protectedAreas = [];
+      };
+      img.src = URL.createObjectURL(file);
+    });
+
+    function updateCanvasVisibility() {
+         if (highlightMode) {
+           canvas.style.display = 'none';
+           highlightOverlay.style.display = 'block';
+         } else {
+           canvas.style.display = 'block';
+           highlightOverlay.style.display = 'none';
+         }
+       }
+	   
+	function highlightColoredAreas(blackTolerance = 50, whiteTolerance = 200) {
+		highlightCtx.drawImage(canvas, 0, 0);
+	    if (!highlightMode) {
+	           updateCanvasVisibility();
+	           return;
+	         }
+
+	      const data = editedImageState.data;
+	      const width = canvas.width;
+
+	      // Clear previous highlights
+	      highlightCtx.clearRect(0, 0, highlightOverlay.width, highlightOverlay.height);
+
+	      function isColored1(r, g, b) {
+	        const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+	        return (
+	          (r > blackTolerance || g > blackTolerance || b > blackTolerance) &&
+	          brightness < whiteTolerance &&
+	          !(r > 200 && g > 200 && b > 200)
+	        );
+	      }
+		  
+	      function isColored(r, g, b) {
+	        const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+	        return (r > blackTolerance || g > blackTolerance || b > blackTolerance) &&
+	               (r < whiteTolerance || g < whiteTolerance || b < whiteTolerance) &&
+	               (brightness < whiteTolerance) &&
+					!(r > 200 && g > 200 && b > 200)
+			;
+	      }
+
+	      for (let y = 0; y < editedImageState.height; y++) {
+	        for (let x = 0; x < editedImageState.width; x++) {
+	          if (isPointInProtectedArea(x, y)) continue;
+          
+	          const idx = (y * width + x) * 4;
+	          const [r, g, b] = [data[idx], data[idx + 1], data[idx + 2]];
+
+	          if (isColored(r, g, b)) {
+	            highlightCtx.fillStyle = 'rgba(255, 77, 255, 0.8)';
+	            highlightCtx.fillRect(x, y, 1, 1);
+	          }
+	        }
+	      }
+		  updateCanvasVisibility();
+	    }
+		
+
+    function removeColoredAreas(blackTolerance = 50, whiteTolerance = 200) {
+      const data = editedImageState.data;
+      const width = canvas.width;
+
+      function isColored(r, g, b) {
+        const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+        return (r > blackTolerance || g > blackTolerance || b > blackTolerance) &&
+               (r < whiteTolerance || g < whiteTolerance || b < whiteTolerance) &&
+               (brightness < whiteTolerance);
+      }
+
+      // Start with current edited state
+      ctx.putImageData(editedImageState, 0, 0);
+
+      for (let y = 0; y < editedImageState.height; y++) {
+        for (let x = 0; x < editedImageState.width; x++) {
+          if (isPointInProtectedArea(x, y)) continue;
+          
+          const idx = (y * width + x) * 4;
+          const [r, g, b] = [data[idx], data[idx + 1], data[idx + 2]];
+
+          if (isColored(r, g, b) && !isNearWhiteOrBlack(x, y, width, blackTolerance, whiteTolerance)) {
+            ctx.fillStyle = 'rgba(255, 255, 255)';
+            ctx.fillRect(x, y, 1, 1);
+          }
+        }
+      }
+
+      // Update edited state
+      editedImageState = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      
+      if (drawMode) {
+        drawProtectedAreas();
+      }
+    }
+
+    function isNearWhiteOrBlack(x, y, width, blackTolerance, whiteTolerance) {
+      const neighbors = [-1, 0, 1];
+
+      for (let dy of neighbors) {
+        for (let dx of neighbors) {
+          const nx = x + dx;
+          const ny = y + dy;
+
+          if (nx < 0 || ny < 0 || nx >= canvas.width || ny >= canvas.height) continue;
+
+          const nidx = (ny * width + nx) * 4;
+          const nr = imageData.data[nidx];
+          const ng = imageData.data[nidx + 1];
+          const nb = imageData.data[nidx + 2];
+
+          if ((nr < blackTolerance && ng < blackTolerance && nb < blackTolerance) ||
+              (nr > whiteTolerance && ng > whiteTolerance && nb > whiteTolerance)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    document.getElementById('highlight-colored').addEventListener('click', () => {
+      const blackTolerance = parseInt(document.getElementById('blackTolerance').value);
+      const whiteTolerance = parseInt(document.getElementById('whiteTolerance').value);
+      highlightColoredAreas(blackTolerance, whiteTolerance);
+    });
+
+    document.getElementById('remove-colored').addEventListener('click', () => {
+        if (highlightMode) {
+           highlightMode = false;
+           highlightButton.classList.remove('active-tool');
+           updateCanvasVisibility();
+         }
+      const blackTolerance = parseInt(document.getElementById('blackTolerance').value);
+      const whiteTolerance = parseInt(document.getElementById('whiteTolerance').value);
+      removeColoredAreas(blackTolerance, whiteTolerance);
+    });
+
+    document.getElementById('reset').addEventListener('click', () => {
+      ctx.putImageData(imageData, 0, 0);
+      editedImageState = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      protectedAreas = [];
+      if (drawMode) {
+        drawProtectedAreas();
+      }
+    });
+
+    // Draggable controls
+    const controls = document.getElementById('controls');
+    let isDragging = false;
+    let offsetX, offsetY;
+
+    controls.addEventListener('mousedown', (e) => {
+      if (e.target.tagName === 'BUTTON') return;
+      isDragging = true;
+      offsetX = e.clientX - controls.offsetLeft;
+      offsetY = e.clientY - controls.offsetTop;
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        controls.style.left = `${e.clientX - offsetX}px`;
+        controls.style.top = `${e.clientY - offsetY}px`;
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+
+    // Restore and Restore logic
+	const closeButton = document.getElementById('close-button');
+    const showControlsButton = document.getElementById('show-controls');
+
+	closeButton.addEventListener('click', (e) => {
+	      e.stopPropagation(); // Prevent dragging when clicking close
+	      controls.classList.add('hide');
+	      showControlsButton.style.display = 'flex';
+	    });
+		
+
+    showControlsButton.addEventListener('click', () => {
+      controls.classList.toggle('hide');
+      showControlsButton.style.display = 'none';
+    });
+	
+// Modified highlight button event listener
+    const highlightButton = document.getElementById('highlight-colored');
+    highlightButton.addEventListener('click', () => {
+      highlightMode = !highlightMode;
+      highlightButton.classList.toggle('active-tool');
+      
+      const blackTolerance = parseInt(document.getElementById('blackTolerance').value);
+      const whiteTolerance = parseInt(document.getElementById('whiteTolerance').value);
+      highlightColoredAreas(blackTolerance, whiteTolerance);
+    });
+
+    // Modify reset function to clear highlight overlay
+    document.getElementById('reset').addEventListener('click', () => {
+      ctx.putImageData(imageData, 0, 0);
+      editedImageState = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      highlightCtx.clearRect(0, 0, highlightOverlay.width, highlightOverlay.height);
+      protectedAreas = [];
+      if (drawMode) {
+        drawProtectedAreas();
+      }
+      // Reset highlight mode
+      highlightMode = false;
+      highlightButton.classList.remove('active-tool');
+    });
+	
+	let eraserMode = false;
+	    let eraserSize = 30;
+	    let currentColor = '#FFFFFF';
+	    const eraserButton = document.getElementById('eraser-tool');
+
+	    function updateEraserCursor() {
+	      if (!eraserMode) return;
+      
+	      const size = document.getElementById('eraserSize').value;
+	      const cursorStyle = `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='${size}' height='${size}'><rect width='100%' height='100%' fill='white' stroke='black' stroke-width='1'/></svg>") ${size/2} ${size/2}, auto`;
+	      canvas.style.cursor = cursorStyle;
+	    }
+		
+		function handleDrawing(event) {
+		      if (!eraserMode || event.buttons !== 1) return;
+      
+		      // Get the position relative to the scaled canvas
+		      const rect = canvas.getBoundingClientRect();
+		      const scaleX = canvas.width / rect.width;
+		      const scaleY = canvas.height / rect.height;
+      
+		      const x = (event.clientX - rect.left) * scaleX;
+		      const y = (event.clientY - rect.top) * scaleY;
+      
+		      ctx.globalCompositeOperation = 'source-over';
+		      ctx.fillStyle = currentColor;
+		      const halfEraserSize = eraserSize / 2;
+		      ctx.fillRect(x - halfEraserSize, y - halfEraserSize, eraserSize, eraserSize);
+      
+		      // Update the edited state
+		      editedImageState = ctx.getImageData(0, 0, canvas.width, canvas.height);
+		    }
+
+		    // Eraser tool event listeners
+		    eraserButton.addEventListener('click', () => {
+		      eraserMode = !eraserMode;
+		      eraserButton.classList.toggle('active-tool');
+      
+		      // Disable other modes
+		      if (eraserMode) {
+		        drawMode = false;
+		        highlightMode = false;
+		        drawRectButton.classList.remove('active-tool');
+		        highlightButton.classList.remove('active-tool');
+		        updateCanvasVisibility();
+		        updateEraserCursor();
+				resetToOriginalSize();
+		      } else {
+		        canvas.style.cursor = 'default';
+		      }
+		    });
+
+		    document.getElementById('eraserSize').addEventListener('input', () => {
+		      eraserSize = parseInt(document.getElementById('eraserSize').value);
+		      updateEraserCursor();
+		    });
+
+		    document.getElementById('colorPicker').addEventListener('input', () => {
+		      currentColor = document.getElementById('colorPicker').value;
+		    });
+
+		    // Add eraser drawing handlers to canvas
+		    canvas.addEventListener('mousemove', handleDrawing);
+		    canvas.addEventListener('mousedown', handleDrawing);
+
+		    // Modify existing mode toggles to handle eraser mode
+		    drawRectButton.addEventListener('click', () => {
+		      if (eraserMode) {
+		        eraserMode = false;
+		        eraserButton.classList.remove('active-tool');
+		        canvas.style.cursor = 'default';
+		      }
+		      // ... rest of draw rectangle logic
+		    });
+
+		    // Add save image functionality
+		    document.getElementById('saveImg').addEventListener('click', () => {
+		      const link = document.createElement('a');
+		      link.download = 'edited-image.png';
+		      link.href = canvas.toDataURL('image/png');
+		      link.click();
+		    });
+  </script>
+</body>
+</html>
